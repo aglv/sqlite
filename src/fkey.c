@@ -633,10 +633,12 @@ static void fkScanChildren(
   /* Create VDBE to loop through the entries in pSrc that match the WHERE
   ** clause. For each row found, increment either the deferred or immediate
   ** foreign key constraint counter. */
-  pWInfo = sqlite3WhereBegin(pParse, pSrc, pWhere, 0, 0, 0, 0);
-  sqlite3VdbeAddOp2(v, OP_FkCounter, pFKey->isDeferred, nIncr);
-  if( pWInfo ){
-    sqlite3WhereEnd(pWInfo);
+  if( pParse->nErr==0 ){
+    pWInfo = sqlite3WhereBegin(pParse, pSrc, pWhere, 0, 0, 0, 0);
+    sqlite3VdbeAddOp2(v, OP_FkCounter, pFKey->isDeferred, nIncr);
+    if( pWInfo ){
+      sqlite3WhereEnd(pWInfo);
+    }
   }
 
   /* Clean up the WHERE clause constructed above. */
@@ -723,7 +725,7 @@ void sqlite3FkDropTable(Parse *pParse, SrcList *pName, Table *pTab){
     }
 
     pParse->disableTriggers = 1;
-    sqlite3DeleteFrom(pParse, sqlite3SrcListDup(db, pName, 0), 0);
+    sqlite3DeleteFrom(pParse, sqlite3SrcListDup(db, pName, 0), 0, 0, 0);
     pParse->disableTriggers = 0;
 
     /* If the DELETE has generated immediate foreign key constraint 
@@ -1281,7 +1283,7 @@ static Trigger *fkActionTrigger(
           sqlite3ExprListAppend(pParse, 0, pRaise),
           sqlite3SrcListAppend(db, 0, &tFrom, 0),
           pWhere,
-          0, 0, 0, 0, 0, 0
+          0, 0, 0, 0, 0
       );
       pWhere = 0;
     }

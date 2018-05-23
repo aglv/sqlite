@@ -39,8 +39,14 @@ static int execSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
   while( SQLITE_ROW==(rc = sqlite3_step(pStmt)) ){
     const char *zSubSql = (const char*)sqlite3_column_text(pStmt,0);
     assert( sqlite3_strnicmp(zSql,"SELECT",6)==0 );
-    if( zSubSql ){
-      assert( zSubSql[0]!='S' );
+    /* The secondary SQL must be one of CREATE TABLE, CREATE INDEX,
+    ** or INSERT.  Historically there have been attacks that first
+    ** corrupt the sqlite_master.sql field with other kinds of statements
+    ** then run VACUUM to get those statements to execute at inappropriate
+    ** times. */
+    if( zSubSql
+     && (strncmp(zSubSql,"CRE",3)==0 || strncmp(zSubSql,"INS",3)==0)
+    ){
       rc = execSql(db, pzErrMsg, zSubSql);
       if( rc!=SQLITE_OK ) break;
     }
@@ -130,7 +136,8 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
   int rc = SQLITE_OK;     /* Return code from service routines */
   Btree *pMain;           /* The database being vacuumed */
   Btree *pTemp;           /* The temporary database we vacuum into */
-  int saved_flags;        /* Saved value of the db->flags */
+  u16 saved_mDbFlags;     /* Saved value of db->mDbFlags */
+  u32 saved_flags;        /* Saved value of db->flags */
   int saved_nChange;      /* Saved value of db->nChange */
   int saved_nTotalChange; /* Saved value of db->nTotalChange */
   u8 saved_mTrace;        /* Saved trace settings */
@@ -153,11 +160,12 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
   ** restored before returning. Then set the writable-schema flag, and
   ** disable CHECK and foreign key constraints.  */
   saved_flags = db->flags;
+  saved_mDbFlags = db->mDbFlags;
   saved_nChange = db->nChange;
   saved_nTotalChange = db->nTotalChange;
   saved_mTrace = db->mTrace;
-  db->flags |= (SQLITE_WriteSchema | SQLITE_IgnoreChecks
-                 | SQLITE_PreferBuiltin | SQLITE_Vacuum);
+  db->flags |= SQLITE_WriteSchema | SQLITE_IgnoreChecks;
+  db->mDbFlags |= DBFLAG_PreferBuiltin | DBFLAG_Vacuum;
   db->flags &= ~(SQLITE_ForeignKeys | SQLITE_ReverseOrder | SQLITE_CountRows);
   db->mTrace = 0;
 
@@ -201,7 +209,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
     extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
     int nKey;
     char *zKey;
-    sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
+    sqlite3CodecGetKey(db, iDb, (void**)&zKey, &nKey);
     if( nKey ) db->nextPagesize = 0;
   }
 #endif
@@ -251,7 +259,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
   if( rc!=SQLITE_OK ) goto end_of_vacuum;
   rc = execSqlF(db, pzErrMsg,
       "SELECT sql FROM \"%w\".sqlite_master"
-      " WHERE type='index' AND length(sql)>10",
+      " WHERE type='index'",
       zDbMain
   );
   if( rc!=SQLITE_OK ) goto end_of_vacuum;
@@ -268,8 +276,8 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
       "WHERE type='table'AND coalesce(rootpage,1)>0",
       zDbMain
   );
-  assert( (db->flags & SQLITE_Vacuum)!=0 );
-  db->flags &= ~SQLITE_Vacuum;
+  assert( (db->mDbFlags & DBFLAG_Vacuum)!=0 );
+  db->mDbFlags &= ~DBFLAG_Vacuum;
   if( rc!=SQLITE_OK ) goto end_of_vacuum;
 
   /* Copy the triggers, views, and virtual tables from the main database
@@ -337,6 +345,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
 end_of_vacuum:
   /* Restore the original value of db->flags */
   db->init.iDb = 0;
+  db->mDbFlags = saved_mDbFlags;
   db->flags = saved_flags;
   db->nChange = saved_nChange;
   db->nTotalChange = saved_nTotalChange;

@@ -736,6 +736,7 @@ static int processDevSymArgs(
     { "sequential",          SQLITE_IOCAP_SEQUENTIAL            },
     { "safe_append",         SQLITE_IOCAP_SAFE_APPEND           },
     { "powersafe_overwrite", SQLITE_IOCAP_POWERSAFE_OVERWRITE   },
+    { "batch-atomic",        SQLITE_IOCAP_BATCH_ATOMIC          },
     { 0, 0 }
   };
 
@@ -1000,6 +1001,50 @@ static int SQLITE_TCLAPI dsUnregisterObjCmd(
 }
 
 /*
+** tclcmd: sqlite3_crash_on_write N
+*/
+static int SQLITE_TCLAPI writeCrashObjCmd(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  void devsym_crash_on_write(int);
+  int nWrite = 0;
+
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "NWRITE");
+    return TCL_ERROR;
+  }
+  if( Tcl_GetIntFromObj(interp, objv[1], &nWrite) ){
+    return TCL_ERROR;
+  }
+
+  devsym_crash_on_write(nWrite);
+  return TCL_OK;
+}
+
+/*
+** tclcmd: unregister_devsim
+*/
+static int SQLITE_TCLAPI dsUnregisterObjCmd(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  void devsym_unregister(void);
+
+  if( objc!=1 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "");
+    return TCL_ERROR;
+  }
+
+  devsym_unregister();
+  return TCL_OK;
+}
+
+/*
 ** tclcmd: register_jt_vfs ?-default? PARENT-VFS
 */
 static int SQLITE_TCLAPI jtObjCmd(
@@ -1068,6 +1113,7 @@ int Sqlitetest6_Init(Tcl_Interp *interp){
   Tcl_CreateObjCommand(interp, "sqlite3_crashparams", crashParamsObjCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "sqlite3_crash_now", crashNowCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "sqlite3_simulate_device", devSymObjCmd, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite3_crash_on_write", writeCrashObjCmd,0,0);
   Tcl_CreateObjCommand(interp, "unregister_devsim", dsUnregisterObjCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "register_jt_vfs", jtObjCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "unregister_jt_vfs", jtUnregisterObjCmd, 0, 0);

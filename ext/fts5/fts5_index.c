@@ -728,7 +728,8 @@ static int fts5IndexPrepareStmt(
 ){
   if( p->rc==SQLITE_OK ){
     if( zSql ){
-      p->rc = sqlite3_prepare_v2(p->pConfig->db, zSql, -1, ppStmt, 0);
+      p->rc = sqlite3_prepare_v3(p->pConfig->db, zSql, -1,
+                                 SQLITE_PREPARE_PERSISTENT, ppStmt, 0);
     }else{
       p->rc = SQLITE_NOMEM;
     }
@@ -757,6 +758,7 @@ static void fts5DataWrite(Fts5Index *p, i64 iRowid, const u8 *pData, int nData){
   sqlite3_bind_blob(p->pWriter, 2, pData, nData, SQLITE_STATIC);
   sqlite3_step(p->pWriter);
   p->rc = sqlite3_reset(p->pWriter);
+  sqlite3_bind_null(p->pWriter, 2);
 }
 
 /*
@@ -777,7 +779,8 @@ static void fts5DataDelete(Fts5Index *p, i64 iFirst, i64 iLast){
     if( zSql==0 ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare_v2(pConfig->db, zSql, -1, &p->pDeleter, 0);
+      rc = sqlite3_prepare_v3(pConfig->db, zSql, -1,
+                              SQLITE_PREPARE_PERSISTENT, &p->pDeleter, 0);
       sqlite3_free(zSql);
     }
     if( rc!=SQLITE_OK ){
@@ -2384,6 +2387,7 @@ static void fts5SegIterSeekInit(
     bDlidx = (val & 0x0001);
   }
   p->rc = sqlite3_reset(pIdxSelect);
+  sqlite3_bind_null(pIdxSelect, 2);
 
   if( iPg<pSeg->pgnoFirst ){
     iPg = pSeg->pgnoFirst;
@@ -3596,6 +3600,7 @@ static int fts5AllocateSegid(Fts5Index *p, Fts5Structure *pStruct){
           sqlite3_bind_blob(pIdxSelect, 2, aBlob, 2, SQLITE_STATIC);
           assert( sqlite3_step(pIdxSelect)!=SQLITE_ROW );
           p->rc = sqlite3_reset(pIdxSelect);
+          sqlite3_bind_null(pIdxSelect, 2);
         }
       }
 #endif
@@ -3722,6 +3727,7 @@ static void fts5WriteFlushBtree(Fts5Index *p, Fts5SegWriter *pWriter){
     sqlite3_bind_int64(p->pIdxWriter, 3, bFlag + ((i64)pWriter->iBtPage<<1));
     sqlite3_step(p->pIdxWriter);
     p->rc = sqlite3_reset(p->pIdxWriter);
+    sqlite3_bind_null(p->pIdxWriter, 2);
   }
   pWriter->iBtPage = 0;
 }
@@ -4907,7 +4913,13 @@ static void fts5MergePrefixLists(
     Fts5Buffer out = {0, 0, 0};
     Fts5Buffer tmp = {0, 0, 0};
 
-    if( sqlite3Fts5BufferSize(&p->rc, &out, p1->n + p2->n) ) return;
+    /* The maximum size of the output is equal to the sum of the two 
+    ** input sizes + 1 varint (9 bytes). The extra varint is because if the
+    ** first rowid in one input is a large negative number, and the first in
+    ** the other a non-negative number, the delta for the non-negative
+    ** number will be larger on disk than the literal integer value
+    ** was.  */
+    if( sqlite3Fts5BufferSize(&p->rc, &out, p1->n + p2->n + 9) ) return;
     fts5DoclistIterInit(p1, &i1);
     fts5DoclistIterInit(p2, &i2);
 
@@ -5001,6 +5013,7 @@ static void fts5MergePrefixLists(
       fts5MergeAppendDocid(&out, iLastRowid, i2.iRowid);
       fts5BufferSafeAppendBlob(&out, i2.aPoslist, i2.aEof - i2.aPoslist);
     }
+    assert( out.n<=(p1->n+p2->n+9) );
 
     fts5BufferSet(&p->rc, p1, out.n, out.p);
     fts5BufferFree(&tmp);

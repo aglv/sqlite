@@ -51,6 +51,7 @@
 # define sqlite3_open16                 0
 # define sqlite3_prepare16              0
 # define sqlite3_prepare16_v2           0
+# define sqlite3_prepare16_v3           0
 # define sqlite3_result_error16         0
 # define sqlite3_result_text16          0
 # define sqlite3_result_text16be        0
@@ -423,7 +424,32 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_trace_v2,
   sqlite3_expanded_sql,
   /* Version 3.18.0 and later */
-  sqlite3_set_last_insert_rowid
+  sqlite3_set_last_insert_rowid,
+  /* Version 3.20.0 and later */
+  sqlite3_prepare_v3,
+  sqlite3_prepare16_v3,
+  sqlite3_bind_pointer,
+  sqlite3_result_pointer,
+  sqlite3_value_pointer,
+  /* Version 3.22.0 and later */
+  sqlite3_vtab_nochange,
+  sqlite3_value_nochange,
+  sqlite3_vtab_collation,
+  /* Version 3.24.0 and later */
+  sqlite3_keyword_count,
+  sqlite3_keyword_name,
+  sqlite3_keyword_check,
+  sqlite3_str_new,
+  sqlite3_str_finish,
+  sqlite3_str_appendf,
+  sqlite3_str_vappendf,
+  sqlite3_str_append,
+  sqlite3_str_appendall,
+  sqlite3_str_appendchar,
+  sqlite3_str_reset,
+  sqlite3_str_errcode,
+  sqlite3_str_length,
+  sqlite3_str_value
 };
 
 /*
